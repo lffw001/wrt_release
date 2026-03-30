@@ -2,41 +2,24 @@
 
 remove_unwanted_packages() {
     local luci_packages=(
-        "luci-app-passwall"      # ← 已存在，确保清理passwall
-        "luci-app-ddns-go"
-        "luci-app-rclone"
-        "luci-app-ssr-plus"
-        "luci-app-vssr"
-        "luci-app-daed"
-        "luci-app-dae"
-        "luci-app-alist"
-        "luci-app-homeproxy"
-        "luci-app-haproxy-tcp"
-        "luci-app-openclash"
-        "luci-app-mihomo"
-        "luci-app-appfilter"
-        "luci-app-msd_lite"
-        "luci-app-unblockneteasemusic"
+        "luci-app-passwall" "luci-app-ddns-go" "luci-app-rclone" "luci-app-ssr-plus"
+        "luci-app-vssr" "luci-app-daed" "luci-app-dae" "luci-app-alist" "luci-app-homeproxy"
+        "luci-app-haproxy-tcp" "luci-app-openclash" "luci-app-mihomo" "luci-app-appfilter"
+        "luci-app-msd_lite" "luci-app-unblockneteasemusic"
     )
-    
     local packages_net=(
-        "haproxy" "xray-core" "xray-plugin" "dns2socks" "alist"
-        "hysteria" "mosdns" "adguardhome" "ddns-go" "naiveproxy"
-        "shadowsocks-rust" "sing-box" "v2ray-core" "v2ray-geodata"
-        "v2ray-plugin" "tuic-client" "chinadns-ng" "ipt2socks"
-        "tcping" "trojan-plus" "simple-obfs" "shadowsocksr-libev"
-        "dae" "daed" "mihomo" "geoview" "tailscale"
-        "open-app-filter" "msd_lite"
+        "haproxy" "xray-core" "xray-plugin" "dns2socks" "alist" "hysteria"
+        "mosdns" "adguardhome" "ddns-go" "naiveproxy" "shadowsocks-rust"
+        "sing-box" "v2ray-core" "v2ray-geodata" "v2ray-plugin" "tuic-client"
+        "chinadns-ng" "ipt2socks" "tcping" "trojan-plus" "simple-obfs" "shadowsocksr-libev"
+        "dae" "daed" "mihomo" "geoview" "tailscale" "open-app-filter" "msd_lite"
     )
-    
-    local packages_utils=("cups")
-    
+    local packages_utils=(
+        "cups"
+    )
     local small8_packages=(
-        "ppp" "firewall" "dae" "daed" "daed-next" "libnftnl" "nftables"
-        "dnsmasq" "luci-app-alist" "alist" "opkg" "smartdns"
-        "luci-app-smartdns"
-        "easytier"              # ← 清理easytier主程序
-        "luci-app-easytier"     # ← [新增] 清理easytier的Luci界面
+        "ppp" "firewall" "dae" "daed" "daed-next" "libnftnl" "nftables" "dnsmasq" "luci-app-alist"
+        "alist" "opkg" "smartdns" "luci-app-smartdns" "easytier"
     )
 
     for pkg in "${luci_packages[@]}"; do
@@ -69,10 +52,9 @@ remove_unwanted_packages() {
     if [[ -d ./package/istore ]]; then
         \rm -rf ./package/istore
     fi
-    
+
     if [ -d "$BUILD_DIR/target/linux/qualcommax/base-files/etc/uci-defaults" ]; then
-        find "$BUILD_DIR/target/linux/qualcommax/base-files/etc/uci-defaults/" \
-            -type f -name "99*.sh" -exec rm -f {} +
+        find "$BUILD_DIR/target/linux/qualcommax/base-files/etc/uci-defaults/" -type f -name "99*.sh" -exec rm -f {} +
     fi
 }
 
@@ -80,8 +62,7 @@ update_golang() {
     if [[ -d ./feeds/packages/lang/golang ]]; then
         echo "正在更新 golang 软件包..."
         \rm -rf ./feeds/packages/lang/golang
-        if ! git clone --depth 1 -b $GOLANG_BRANCH $GOLANG_REPO \
-            ./feeds/packages/lang/golang; then
+        if ! git clone --depth 1 -b $GOLANG_BRANCH $GOLANG_REPO ./feeds/packages/lang/golang; then
             echo "错误：克隆 golang 仓库 $GOLANG_REPO 失败" >&2
             exit 1
         fi
@@ -89,42 +70,29 @@ update_golang() {
 }
 
 install_small8() {
-    ./scripts/feeds install -p small8 -f \
-        xray-core xray-plugin dns2tcp dns2socks haproxy hysteria \
-        naiveproxy shadowsocks-rust sing-box v2ray-core v2ray-geodata \
-        geoview v2ray-plugin tuic-client chinadns-ng ipt2socks tcping \
-        trojan-plus simple-obfs shadowsocksr-libev v2dat mosdns \
-        luci-app-mosdns adguardhome luci-app-adguardhome ddns-go \
-        luci-app-ddns-go taskd luci-lib-xterm luci-lib-taskd \
-        luci-app-store quickstart luci-app-quickstart luci-app-istorex \
-        luci-app-cloudflarespeedtest netdata luci-app-netdata \
-        lucky luci-app-lucky luci-app-openclash luci-app-homeproxy \
-        luci-app-amlogic nikki luci-app-nikki \
-        tailscale luci-app-tailscale oaf open-app-filter luci-app-oaf \
-        # ← [删除] easytier luci-app-easytier \
+    ./scripts/feeds install -p small8 -f xray-core xray-plugin dns2tcp dns2socks haproxy hysteria \
+        naiveproxy shadowsocks-rust sing-box v2ray-core v2ray-geodata geoview v2ray-plugin \
+        tuic-client chinadns-ng ipt2socks tcping trojan-plus simple-obfs shadowsocksr-libev \
+        v2dat mosdns luci-app-mosdns adguardhome luci-app-adguardhome ddns-go \
+        luci-app-ddns-go taskd luci-lib-xterm luci-lib-taskd luci-app-store quickstart \
+        luci-app-quickstart luci-app-istorex luci-app-cloudflarespeedtest netdata luci-app-netdata \
+        lucky luci-app-lucky luci-app-openclash luci-app-homeproxy luci-app-amlogic nikki luci-app-nikki \
+        tailscale luci-app-tailscale oaf open-app-filter luci-app-oaf easytier luci-app-easytier \
         msd_lite luci-app-msd_lite cups luci-app-cupsd
 }
 
 install_passwall() {
-    # ← [注释] 以下两行已注释，不再安装passwall
-    # echo "正在从官方仓库安装 luci-app-passwall..."
-    # ./scripts/feeds install -p passwall -f luci-app-passwall
-    return 0  # ← [新增] 添加空返回，避免函数为空报错
+    echo "正在从官方仓库安装 luci-app-passwall..."
+    ./scripts/feeds install -p passwall -f luci-app-passwall
 }
 
 install_fullconenat() {
-    if [ ! -d "$BUILD_DIR/package/network/utils/fullconenat-nft" ]; then
+    if [ ! -d $BUILD_DIR/package/network/utils/fullconenat-nft ]; then
         ./scripts/feeds install -p small8 -f fullconenat-nft
     fi
-    if [ ! -d "$BUILD_DIR/package/network/utils/fullconenat" ]; then
+    if [ ! -d $BUILD_DIR/package/network/utils/fullconenat ]; then
         ./scripts/feeds install -p small8 -f fullconenat
     fi
-}
-
-# ... [其余函数保持不变，省略以节省空间] ...
-
-update_package() {
-    # ... 保持原样 ...
 }
 
 check_default_settings() {
