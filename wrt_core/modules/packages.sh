@@ -82,8 +82,8 @@ install_small8() {
 }
 
 install_passwall() {
-    # echo "正在从官方仓库安装 luci-app-passwall..."
-    # ./scripts/feeds install -p passwall -f luci-app-passwall
+    echo "正在从官方仓库安装 luci-app-passwall..."
+    ./scripts/feeds install -p passwall -f luci-app-passwall
 }
 
 install_fullconenat() {
