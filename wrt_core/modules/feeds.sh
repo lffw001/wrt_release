@@ -37,15 +37,19 @@ update_feeds() {
 
 install_feeds() {
     ./scripts/feeds update -i
+
     for dir in $BUILD_DIR/feeds/*; do
         if [ -d "$dir" ] && [[ ! "$dir" == *.tmp ]] && [[ ! "$dir" == *.index ]] && [[ ! "$dir" == *.targetindex ]]; then
-            if [[ $(basename "$dir") == "small8" ]]; then
+            local feed_name=$(basename "$dir")
+            
+            if [[ "$feed_name" == "small8" ]]; then
                 install_small8
                 install_fullconenat
-            elif [[ $(basename "$dir") == "passwall" ]]; then
-                install_passwall
+            # [已删除] Passwall 安装逻辑已移除
+            # elif [[ "$feed_name" == "passwall" ]]; then
+            #     install_passwall
             else
-                ./scripts/feeds install -f -ap $(basename "$dir")
+                ./scripts/feeds install -f -ap "$feed_name"
             fi
         fi
     done
