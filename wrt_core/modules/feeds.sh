@@ -37,7 +37,8 @@ update_feeds() {
     if ! grep -q "nikki" "$BUILD_DIR/$FEEDS_CONF"; then
         [ -z "$(tail -c 1 "$BUILD_DIR/$FEEDS_CONF")" ] || echo "" >>"$BUILD_DIR/$FEEDS_CONF"
         echo 'src-git nikki https://github.com/nikkinikki-org/OpenWrt-nikki.git;main' >>"$BUILD_DIR/$FEEDS_CONF"
-        
+    fi  # 这里添加了缺失的 fi
+
     if [ ! -f "$BUILD_DIR/include/bpf.mk" ]; then
         touch "$BUILD_DIR/include/bpf.mk"
     fi
