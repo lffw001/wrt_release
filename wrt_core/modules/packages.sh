@@ -656,7 +656,7 @@ update_package() {
             local PKG_GIT_REF_RAW
             PKG_GIT_REF_RAW=$(awk -F"=" '/^PKG_GIT_REF:=/ {print $NF}' "$mk_path")
 
-            如果 [  "" ] 或者 [ -z "$PKG_GIT_REF_RAW" ]; 那么
+            if [ -z "$PKG_GIT_URL_RAW" ] || [ -z "$PKG_GIT_REF_RAW" ]; then
                 echo "错误：$mk_path 缺少 PKG_GIT_URL 或 PKG_GIT_REF，无法更新 PKG_GIT_SHORT_COMMIT" >&2
                 return 1
             fi
@@ -681,37 +681,37 @@ update_package() {
             fi
             if [ -z "$COMMIT_SHA" ]; then
                 echo "错误：无法从 https://$PKG_GIT_URL_RAW 获取 $PKG_GIT_REF_RESOLVED 的提交哈希" >&2
-                返回 
-            输入：fi
+                return 1
+            fi
 
-            本地短提交
-            短提交=$(echo "$COMMIT_SHA" | cut -c1-7)
+            local SHORT_COMMIT
+            SHORT_COMMIT=$(echo "$COMMIT_SHA" | cut -c1-7)
             sed -i "s/^PKG_GIT_SHORT_COMMIT:=.*/PKG_GIT_SHORT_COMMIT:=$SHORT_COMMIT/g" "$mk_path"
-        输入：fi
-        PKG_VER=$(echo "$PKG_VER" | grep -oE "[\./0-9]{1,}")
+        fi
+        PKG_VER=$(echo "$PKG_VER" | grep -oE "[\.0-9]{1,}")
 
-        本地 PKG_NAME"=" '/PKG_NAME:=/ {print $NF}' "$mk_path""[-_:/\$\(\)\?\.a-zA-Z0-9]{1,}"
-        本地 =$(awk -F"=" '/PKG_SOURCE:=/ {print $NF}' "$mk_path" | grep -oE "[-_:/\$\(\)\?\.a-zA-Z0-9]{1,}")
-        本地 PKG_SOURCE_URL=$(awk -F"=" '/PKG_SOURCE_URL:=/ {print $NF}' "$mk_path" | grep -oE "[-_:/\$\(\)\{\}\?\.a-zA-Z0-9]{1,}")
-        本地 PKG_GIT_URL"=" '/PKG_GIT_URL:=/ {print $NF}' "$mk_path"
-        本地 =$(awk -F"=" '>/PKG_GIT_REF:=/ {print $NF}' "$mk_path")
+        local PKG_NAME=$(awk -F"=" '/PKG_NAME:=/ {print $NF}' "$mk_path" | grep -oE "[-_:/\$\(\)\?\.a-zA-Z0-9]{1,}")
+        local PKG_SOURCE=$(awk -F"=" '/PKG_SOURCE:=/ {print $NF}' "$mk_path" | grep -oE "[-_:/\$\(\)\?\.a-zA-Z0-9]{1,}")
+        local PKG_SOURCE_URL=$(awk -F"=" '/PKG_SOURCE_URL:=/ {print $NF}' "$mk_path" | grep -oE "[-_:/\$\(\)\{\}\?\.a-zA-Z0-9]{1,}")
+        local PKG_GIT_URL=$(awk -F"=" '/PKG_GIT_URL:=/ {print $NF}' "$mk_path")
+        local PKG_GIT_REF=$(awk -F"=" '/PKG_GIT_REF:=/ {print $NF}' "$mk_path")
 
-        PKG_SOURCE_URL=${PKG_SOURCE_URL//\($PKG_GIT_URL\)/$PKG_GIT_URL}
-        PKG_SOURCE_URL=将 \$\(PKG_GIT_REF\) 替换为 /$PKG_GIT_REF}
-        PKG_SOURCE_URL=${PKG_SOURCE_URL//\(\$\(PKG_NAME\)/$PKG_NAME}
+        PKG_SOURCE_URL=${PKG_SOURCE_URL//\$\(PKG_GIT_URL\)/$PKG_GIT_URL}
+        PKG_SOURCE_URL=${PKG_SOURCE_URL//\$\(PKG_GIT_REF\)/$PKG_GIT_REF}
+        PKG_SOURCE_URL=${PKG_SOURCE_URL//\$\(PKG_NAME\)/$PKG_NAME}
         PKG_SOURCE_URL=$(echo "$PKG_SOURCE_URL" | sed "s/\${PKG_VERSION}/$PKG_VER/g; s/\$(PKG_VERSION)/$PKG_VER/g")
-        PKG_SOURCE=${PKG_SOURCE//\${PKG_NAME}$PKG_NAME}
-        PKG_SOURCE=${PKG_SOURCE//\($PKG_VERSION\)/$PKG_VER}
+        PKG_SOURCE=${PKG_SOURCE//\$\(PKG_NAME\)/$PKG_NAME}
+        PKG_SOURCE=${PKG_SOURCE//\$\(PKG_VERSION\)/$PKG_VER}
 
-        本地 PKG_HASH
-        如果 ! PKG_HASH=$(curl -fsSL "$PKG_SOURCE_URL""$PKG_SOURCE" | sha256sum | cut -b -64); 那么
+        local PKG_HASH
+        if ! PKG_HASH=$(curl -fsSL "$PKG_SOURCE_URL""$PKG_SOURCE" | sha256sum | cut -b -64); then
             echo "错误：从 $PKG_SOURCE_URL$PKG_SOURCE 获取软件包哈希失败" >&2
-            返回 1
-        输入：fi
+            return 1
+        fi
 
         sed -i 's/^PKG_VERSION:=.*/PKG_VERSION:='$PKG_VER'/g' "$mk_path"
         sed -i 's/^PKG_HASH:=.*/PKG_HASH:='$PKG_HASH'/g' "$mk_path"
 
-        echo "更新软件包 $1 到 $PKG_VER" 
-    输入：fi
+        echo "更新软件包 $1 到 $PKG_VER $PKG_HASH"
+    fi
 }
