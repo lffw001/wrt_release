@@ -5,21 +5,23 @@ remove_unwanted_packages() {
         "luci-app-passwall" "luci-app-ddns-go" "luci-app-rclone" "luci-app-ssr-plus"
         "luci-app-vssr" "luci-app-daed" "luci-app-dae" "luci-app-alist" "luci-app-homeproxy"
         "luci-app-haproxy-tcp" "luci-app-openclash" "luci-app-mihomo" "luci-app-appfilter"
-        "luci-app-msd_lite" "luci-app-unblockneteasemusic"
+        "luci-app-msd_lite" "luci-app-unblockneteasemusic" "luci-app-qbittorrent" "luci-app-adguardhome"
     )
     local packages_net=(
         "haproxy" "xray-core" "xray-plugin" "dns2socks" "alist" "hysteria"
-        "adguardhome" "ddns-go" "naiveproxy" "shadowsocks-rust"
+        "mosdns" "adguardhome" "ddns-go" "naiveproxy" "shadowsocks-rust"
         "sing-box" "v2ray-core" "v2ray-geodata" "v2ray-plugin" "tuic-client"
         "chinadns-ng" "ipt2socks" "tcping" "trojan-plus" "simple-obfs" "shadowsocksr-libev"
-        "dae" "daed" "mihomo" "geoview" "open-app-filter" "msd_lite"
+        "dae" "daed" "mihomo" "geoview" "tailscale" "open-app-filter" "msd_lite"
     )
     local packages_utils=(
         "cups"
     )
+    local packages_libs=(
+    )
     local small8_packages=(
-        "ppp" "firewall" "dae" "daed" "daed-next" "libnftnl" "nftables" "luci-app-alist"
-        "alist" "opkg"
+        "ppp" "firewall" "dae" "daed" "daed-next" "libnftnl" "nftables" "dnsmasq" "luci-app-alist"
+        "alist" "opkg" "smartdns" "luci-app-smartdns" "easytier" "tailscale"
     )
 
     for pkg in "${luci_packages[@]}"; do
@@ -40,6 +42,12 @@ remove_unwanted_packages() {
     for pkg in "${packages_utils[@]}"; do
         if [[ -d ./feeds/packages/utils/$pkg ]]; then
             \rm -rf ./feeds/packages/utils/$pkg
+        fi
+    done
+
+    for pkg in "${packages_libs[@]}"; do
+        if [[ -d ./feeds/packages/libs/$pkg ]]; then
+            \rm -rf ./feeds/packages/libs/$pkg
         fi
     done
 
@@ -70,15 +78,68 @@ update_golang() {
 }
 
 install_small8() {
-    ./scripts/feeds install -p small8 -f xray-core xray-plugin dns2tcp dns2socks haproxy hysteria \
-        naiveproxy shadowsocks-rust sing-box v2ray-core v2ray-geodata geoview v2ray-plugin \
-        tuic-client chinadns-ng ipt2socks tcping trojan-plus simple-obfs shadowsocksr-libev \
-        v2dat adguardhome luci-app-adguardhome ddns-go \
-        luci-app-ddns-go taskd luci-lib-xterm luci-lib-taskd luci-app-store quickstart \
-        luci-app-quickstart luci-app-istorex luci-app-cloudflarespeedtest netdata luci-app-netdata \
-        lucky luci-app-lucky luci-app-openclash luci-app-homeproxy luci-app-amlogic nikki luci-app-nikki \
-        oaf open-app-filter luci-app-oaf easytier luci-app-easytier \
-        msd_lite luci-app-msd_lite cups luci-app-cupsd
+    local repo_url="https://github.com/kenzok8/jell.git"
+    local feed_name="small8"
+    
+    # 将稀疏克隆下来的包放到一个本地自定义 feed 目录中
+    local custom_feed_dir="$PWD/custom_feeds/$feed_name"
+    local tmp_dir
+    tmp_dir=$(mktemp -d)
+
+    # 1. 集中管理你要的包名
+    local packages=(
+        xray-core xray-plugin dns2tcp dns2socks hysteria
+        naiveproxy shadowsocks-rust sing-box v2ray-core v2ray-geodata geoview v2ray-plugin
+        tuic-client chinadns-ng ipt2socks tcping trojan-plus simple-obfs shadowsocksr-libev
+        v2dat taskd luci-lib-xterm netdata luci-app-netdata cups
+        lucky luci-app-lucky luci-app-openclash luci-app-homeproxy luci-app-amlogic
+        easytier luci-app-easytier luci-theme-argon luci-app-argon-config
+    )
+
+    # 2. 准备本地 feed 目录
+    if [ -d "$custom_feed_dir" ]; then
+        echo "清理旧的自定义 feed 目录..."
+        rm -rf "$custom_feed_dir"
+    fi
+    mkdir -p "$custom_feed_dir"
+
+    # 3. 稀疏克隆拉取骨架
+    echo "正在使用稀疏克隆(sparse-checkout)拉取 $feed_name 仓库骨架..."
+    rm -rf "$tmp_dir"
+    if ! git clone --depth 1 --filter=blob:none --sparse "$repo_url" "$tmp_dir"; then
+        echo "错误：从 $repo_url 拉取仓库骨架失败" >&2
+        return 1
+    fi
+
+    # 4. 告诉 Git 只拉取数组中的目录
+    echo "配置需要下载的包列表并拉取文件..."
+    git -C "$tmp_dir" sparse-checkout set "${packages[@]}"
+
+    # 5. 将拉取到的包移入我们的 custom_feeds 目录
+    for pkg in "${packages[@]}"; do
+        if [ -d "$tmp_dir/$pkg" ]; then
+            mv "$tmp_dir/$pkg" "$custom_feed_dir/"
+        else
+            echo "  [警告] 仓库中未找到包: $pkg"
+        fi
+    done
+
+    # 6. 清理临时克隆目录
+    rm -rf "$tmp_dir"
+    
+    # 7. 将本地目录作为 src-link 写入 feeds.conf.default
+    sed -i "/$feed_name/d" feeds.conf.default
+    echo "src-link $feed_name $custom_feed_dir" >> feeds.conf.default
+    echo "已将 $feed_name 作为本地源 (src-link) 添加到 feeds.conf.default"
+
+    # 8. 更新 feed 索引并安装数组中的包
+    echo "正在 update 和 install feeds..."
+    ./scripts/feeds update "$feed_name"
+    
+    # 这里的 "${packages[@]}" 会自动展开成包名列表，等同于 install -p small8 pkg1 pkg2...
+    ./scripts/feeds install -p "$feed_name" "${packages[@]}"
+    
+    echo "$feed_name 指定包处理完成并已成功加载到 feeds 体系中！"
 }
 
 install_passwall() {
@@ -88,12 +149,7 @@ install_passwall() {
 
 install_nikki() {
     echo "正在从官方仓库安装 nikki..."
-    ./scripts/feeds install -p nikki -f nikki luci-app-nikki
-}
-
-install_tailscale() {
-    echo "正在从官方仓库安装 nikki..."
-    ./scripts/feeds install -p tailscale -f nikki luci-app-tailscale
+    ./scripts/feeds install -p nikki -f -a
 }
 
 install_fullconenat() {
@@ -159,6 +215,123 @@ update_homeproxy() {
             echo "错误：从 $repo_url 克隆 homeproxy 仓库失败" >&2
             exit 1
         fi
+    fi
+}
+
+add_nf_deaf() {
+    local nfdeaf_dir="$BUILD_DIR/package/kernel/nf_deaf"
+    local repo_url="https://github.com/kob/nf_deaf-openwrt.git"
+
+    echo "正在添加 nf_deaf..."
+    rm -rf "$nfdeaf_dir" 2>/dev/null
+
+    if ! git clone --depth=1 "$repo_url" "$nfdeaf_dir"; then
+        echo "错误：从 $repo_url 克隆 nfdeaf 仓库失败" >&2
+        exit 1
+    fi
+
+}
+
+update_tailscale() {
+    # 处理 UPX 压缩工具依赖
+    echo "正在检查并配置 UPX 压缩工具依赖..."
+    local upx_dir="$BUILD_DIR/upx"
+    local upx_path="$upx_dir/upx"
+
+    if [ ! -x "$upx_path" ]; then
+        mkdir -p "$upx_dir"
+        
+        # 检查系统全局是否已经安装了 upx
+        if ! command -v upx &> /dev/null; then
+            echo "系统未安装 upx, 正在尝试通过 apt-get 自动安装..."
+            # 这里的 || true 是为了防止网络卡顿时 update 报错导致整个脚本退出
+            sudo apt-get update -y || true
+            sudo apt-get install -y upx-ucl
+        fi
+        
+        # 找到系统 upx 的绝对路径，并建立 Makefile 需要的软链接
+        local sys_upx=$(command -v upx)
+        if [ -n "$sys_upx" ]; then
+            ln -sf "$sys_upx" "$upx_path"
+            echo "✔ 成功创建 UPX 软链接: $sys_upx -> $upx_path"
+        else
+            echo "❌ 警告: UPX 安装失败或未找到，稍后的编译可能仍然会报错！" >&2
+        fi
+    else
+        echo "✔ UPX 工具已就绪 ($upx_path)"
+    fi
+
+    # 使用GuNanOvO/openwrt-tailscale的tailscale 
+    local repo_url="https://github.com/GuNanOvO/openwrt-tailscale.git"
+    # tailscale 路径
+    local target_dir="$BUILD_DIR/package/tailscale" 
+    # 源码在大仓库里的实际相对路径
+    local sub_dir="package/tailscale"
+    # 设置一个临时克隆目录
+    local tmp_dir
+    tmp_dir=$(mktemp -d)
+
+    # 1. 如果存在旧的，先删掉
+    if [ -d "$target_dir" ]; then
+        echo "正在从 $target_dir 删除旧的 tailscale..."
+        rm -rf "$target_dir"
+    fi
+
+    echo "正在使用稀疏克隆(sparse-checkout)拉取最新版 tailscale..."
+    
+    # 初始化并拉取仓库的骨架（不下载具体文件，极速）
+    rm -rf "$tmp_dir"
+    if ! git clone --depth 1 --filter=blob:none --sparse "$repo_url" "$tmp_dir"; then
+        echo "错误：从 $repo_url 拉取仓库骨架失败" >&2
+        exit 1
+    fi
+
+    # 告诉 Git 我们只需要 package/tailscale 这一个文件夹
+    git -C "$tmp_dir" sparse-checkout set "$sub_dir"
+
+    # 将下载好的子文件夹移动到我们真正需要的目标路径
+    mv "$tmp_dir/$sub_dir" "$target_dir"
+    # 修改 Makefile（删除包含 /builder 的行）
+    if ! sed -i '/\/builder/d' "$target_dir/Makefile"; then
+        echo "错误：修改 Makefile 失败" >&2
+        exit 1
+    fi
+    # 清除临时文件夹的残留
+    rm -rf "$tmp_dir"
+    
+    echo "tailscale 更新完成！"
+}
+
+add_podman() {
+    local podman_dir="$BUILD_DIR/package/luci-app-podman"
+    local repo_url="https://github.com/Zerogiven-OpenWRT-Packages/luci-app-podman.git"
+    rm -rf "$podman_dir" 2>/dev/null
+    echo "正在添加 luci-app-podman..."
+    if ! git clone --depth 1 "$repo_url" "$podman_dir"; then
+        echo "错误：从 $repo_url 克隆 openwrt-podman 仓库失败" >&2
+        exit 1
+    fi
+}
+
+add_dufs() {
+    local dufs_dir="$BUILD_DIR/package/luci-app-dufs"
+    local repo_url="https://github.com/zouzonghao/luci-app-dufs.git"
+    rm -rf "$dufs_dir" 2>/dev/null
+    echo "正在添加 luci-app-dufs..."
+    if ! git clone --depth 1 "$repo_url" "$dufs_dir"; then
+        echo "错误：从 $repo_url 克隆 luci-app-dufs 仓库失败" >&2
+        exit 1
+    fi
+}
+
+add_qbittorrentstatic() {
+    local qbittorrentstatic_dir="$BUILD_DIR/package/luci-app-qbittorrent-static"
+    local repo_url="https://github.com/haohaoget/luci-app-qbittorrent-static.git"
+    rm -rf "$qbittorrentstatic_dir" 2>/dev/null
+    echo "正在添加 luci-app-qbittorrent-static..."
+    if ! git clone --depth 1 "$repo_url" "$qbittorrentstatic_dir"; then
+        echo "错误：从 $repo_url 克隆 luci-app-qbittorrent-static 仓库失败" >&2
+        exit 1
     fi
 }
 
@@ -330,6 +503,10 @@ _sync_luci_lib_docker() {
         
         mv collections/luci-lib-docker ../luci-lib-docker || return
         cd .. || return
+        # 处理 luci-lib-docker 版本号中的 'v' 前缀
+        if [ -f "$BUILD_DIR/feeds/luci/libs/luci-lib-docker/Makefile" ]; then
+            sed -i 's/PKG_VERSION:=v/PKG_VERSION:=/g' "$BUILD_DIR/feeds/luci/libs/luci-lib-docker/Makefile"
+        fi
         \rm -rf luci-lib-docker-tmp
         cd "$BUILD_DIR"
         echo "luci-lib-docker 同步完成"
@@ -365,6 +542,11 @@ update_dockerman() {
 
         if declare -F docker_stack_sync_dockerman_nftables_compat >/dev/null 2>&1; then
             docker_stack_sync_dockerman_nftables_compat "$BUILD_DIR" "0" || return 1
+        fi
+
+        # 处理 dockerman 版本号中的 'v' 前缀
+        if [ -f "$path/Makefile" ]; then
+            sed -i 's/PKG_VERSION:=v/PKG_VERSION:=/g' "$path/Makefile"
         fi
 
         echo "dockerman 更新完成"
@@ -413,6 +595,21 @@ update_argon() {
     mv "$tmp_dir" "$dst_theme_path"
 
     echo "luci-theme-argon 更新完成"
+    # 修改主题背景
+    if [ -d "$dst_theme_path" ]; then
+      cp -f $BASE_PATH/argon/img/bg1.jpg $dst_theme_path/htdocs/luci-static/argon/img/bg1.jpg
+      cp -f $BASE_PATH/argon/img/argon.svg $dst_theme_path/htdocs/luci-static/argon/img/argon.svg
+      cp -f $BASE_PATH/argon/favicon.ico $dst_theme_path/htdocs/luci-static/argon/favicon.ico
+      cp -f $BASE_PATH/argon/icon/android-icon-192x192.png $dst_theme_path/htdocs/luci-static/argon/icon/android-icon-192x192.png
+      cp -f $BASE_PATH/argon/icon/apple-icon-144x144.png $dst_theme_path/htdocs/luci-static/argon/icon/apple-icon-144x144.png
+      cp -f $BASE_PATH/argon/icon/apple-icon-60x60.png $dst_theme_path/htdocs/luci-static/argon/icon/apple-icon-60x60.png
+      cp -f $BASE_PATH/argon/icon/apple-icon-72x72.png $dst_theme_path/htdocs/luci-static/argon/icon/apple-icon-72x72.png
+      cp -f $BASE_PATH/argon/icon/favicon-16x16.png $dst_theme_path/htdocs/luci-static/argon/icon/favicon-16x16.png
+      cp -f $BASE_PATH/argon/icon/favicon-32x32.png $dst_theme_path/htdocs/luci-static/argon/icon/favicon-32x32.png
+      cp -f $BASE_PATH/argon/icon/favicon-96x96.png $dst_theme_path/htdocs/luci-static/argon/icon/favicon-96x96.png
+      cp -f $BASE_PATH/argon/icon/ms-icon-144x144.png $dst_theme_path/htdocs/luci-static/argon/icon/ms-icon-144x144.png
+      echo "完成feeds/luci/themes/luci-theme-argon修改主题背景"
+    fi
 }
 
 remove_attendedsysupgrade() {
@@ -459,7 +656,7 @@ update_package() {
             local PKG_GIT_REF_RAW
             PKG_GIT_REF_RAW=$(awk -F"=" '/^PKG_GIT_REF:=/ {print $NF}' "$mk_path")
 
-            if [ -z "$PKG_GIT_URL_RAW" ] || [ -z "$PKG_GIT_REF_RAW" ]; then
+            如果 [  "" ] 或者 [ -z "$PKG_GIT_REF_RAW" ]; 那么
                 echo "错误：$mk_path 缺少 PKG_GIT_URL 或 PKG_GIT_REF，无法更新 PKG_GIT_SHORT_COMMIT" >&2
                 return 1
             fi
@@ -484,37 +681,37 @@ update_package() {
             fi
             if [ -z "$COMMIT_SHA" ]; then
                 echo "错误：无法从 https://$PKG_GIT_URL_RAW 获取 $PKG_GIT_REF_RESOLVED 的提交哈希" >&2
-                return 1
-            fi
+                返回 
+            输入：fi
 
-            local SHORT_COMMIT
-            SHORT_COMMIT=$(echo "$COMMIT_SHA" | cut -c1-7)
+            本地短提交
+            短提交=$(echo "$COMMIT_SHA" | cut -c1-7)
             sed -i "s/^PKG_GIT_SHORT_COMMIT:=.*/PKG_GIT_SHORT_COMMIT:=$SHORT_COMMIT/g" "$mk_path"
-        fi
-        PKG_VER=$(echo "$PKG_VER" | grep -oE "[\.0-9]{1,}")
+        输入：fi
+        PKG_VER=$(echo "$PKG_VER" | grep -oE "[\./0-9]{1,}")
 
-        local PKG_NAME=$(awk -F"=" '/PKG_NAME:=/ {print $NF}' "$mk_path" | grep -oE "[-_:/\$\(\)\?\.a-zA-Z0-9]{1,}")
-        local PKG_SOURCE=$(awk -F"=" '/PKG_SOURCE:=/ {print $NF}' "$mk_path" | grep -oE "[-_:/\$\(\)\?\.a-zA-Z0-9]{1,}")
-        local PKG_SOURCE_URL=$(awk -F"=" '/PKG_SOURCE_URL:=/ {print $NF}' "$mk_path" | grep -oE "[-_:/\$\(\)\{\}\?\.a-zA-Z0-9]{1,}")
-        local PKG_GIT_URL=$(awk -F"=" '/PKG_GIT_URL:=/ {print $NF}' "$mk_path")
-        local PKG_GIT_REF=$(awk -F"=" '/PKG_GIT_REF:=/ {print $NF}' "$mk_path")
+        本地 PKG_NAME"=" '/PKG_NAME:=/ {print $NF}' "$mk_path""[-_:/\$\(\)\?\.a-zA-Z0-9]{1,}"
+        本地 =$(awk -F"=" '/PKG_SOURCE:=/ {print $NF}' "$mk_path" | grep -oE "[-_:/\$\(\)\?\.a-zA-Z0-9]{1,}")
+        本地 PKG_SOURCE_URL=$(awk -F"=" '/PKG_SOURCE_URL:=/ {print $NF}' "$mk_path" | grep -oE "[-_:/\$\(\)\{\}\?\.a-zA-Z0-9]{1,}")
+        本地 PKG_GIT_URL"=" '/PKG_GIT_URL:=/ {print $NF}' "$mk_path"
+        本地 =$(awk -F"=" '>/PKG_GIT_REF:=/ {print $NF}' "$mk_path")
 
-        PKG_SOURCE_URL=${PKG_SOURCE_URL//\$\(PKG_GIT_URL\)/$PKG_GIT_URL}
-        PKG_SOURCE_URL=${PKG_SOURCE_URL//\$\(PKG_GIT_REF\)/$PKG_GIT_REF}
-        PKG_SOURCE_URL=${PKG_SOURCE_URL//\$\(PKG_NAME\)/$PKG_NAME}
+        PKG_SOURCE_URL=${PKG_SOURCE_URL//\($PKG_GIT_URL\)/$PKG_GIT_URL}
+        PKG_SOURCE_URL=将 \$\(PKG_GIT_REF\) 替换为 /$PKG_GIT_REF}
+        PKG_SOURCE_URL=${PKG_SOURCE_URL//\(\$\(PKG_NAME\)/$PKG_NAME}
         PKG_SOURCE_URL=$(echo "$PKG_SOURCE_URL" | sed "s/\${PKG_VERSION}/$PKG_VER/g; s/\$(PKG_VERSION)/$PKG_VER/g")
-        PKG_SOURCE=${PKG_SOURCE//\$\(PKG_NAME\)/$PKG_NAME}
-        PKG_SOURCE=${PKG_SOURCE//\$\(PKG_VERSION\)/$PKG_VER}
+        PKG_SOURCE=${PKG_SOURCE//\${PKG_NAME}$PKG_NAME}
+        PKG_SOURCE=${PKG_SOURCE//\($PKG_VERSION\)/$PKG_VER}
 
-        local PKG_HASH
-        if ! PKG_HASH=$(curl -fsSL "$PKG_SOURCE_URL""$PKG_SOURCE" | sha256sum | cut -b -64); then
+        本地 PKG_HASH
+        如果 ! PKG_HASH=$(curl -fsSL "$PKG_SOURCE_URL""$PKG_SOURCE" | sha256sum | cut -b -64); 那么
             echo "错误：从 $PKG_SOURCE_URL$PKG_SOURCE 获取软件包哈希失败" >&2
-            return 1
-        fi
+            返回 1
+        输入：fi
 
         sed -i 's/^PKG_VERSION:=.*/PKG_VERSION:='$PKG_VER'/g' "$mk_path"
         sed -i 's/^PKG_HASH:=.*/PKG_HASH:='$PKG_HASH'/g' "$mk_path"
 
-        echo "更新软件包 $1 到 $PKG_VER $PKG_HASH"
-    fi
+        echo "更新软件包 $1 到 $PKG_VER" 
+    输入：fi
 }
